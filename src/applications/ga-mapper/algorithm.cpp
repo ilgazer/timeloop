@@ -45,8 +45,6 @@ std::unique_ptr<Application> parse_config(config::CompoundConfig *config, const 
   config::CompoundConfigNode dse_config;
   assert(config->getRoot().lookup("dse", dse_config));
 
-  std::string path = output_dir + "/results/" + make_config_path(dse_config) + "/" + timestamp();
-
   PERM_MUT_PROB = 0.5;
   FACTOR_MUT_PROB = 0.5;
   FACTOR_IMPERFECT_MUT_PROB = 0;
@@ -83,11 +81,11 @@ std::unique_ptr<Application> parse_config(config::CompoundConfig *config, const 
   assert(dse_config.lookupValue("algorithm", algorithm));
   if (algorithm == "hill_climb")
   {
-    return std::make_unique<HillClimb>(config, path, "timeloop-ga");
+    return std::make_unique<HillClimb>(config, output_dir, "timeloop-ga");
   }
   if (algorithm == "genetic_algorithm")
   {
-    return std::make_unique<GeneticAlgorithm>(config, path, "timeloop-ga");
+    return std::make_unique<GeneticAlgorithm>(config, output_dir, "timeloop-ga");
   }
   return nullptr;
 }
