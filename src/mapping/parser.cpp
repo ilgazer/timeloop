@@ -29,6 +29,7 @@
 
 #include "mapping/parser.hpp"
 #include "mapping/arch-properties.hpp"
+#include "model/engine.hpp"
 
 namespace mapping
 {
@@ -58,6 +59,12 @@ void ParseUserDatatypeBypassSettings(config::CompoundConfigNode constraint,
 
 loop::Nest::SkewDescriptor ParseUserSkew(config::CompoundConfigNode directive,
                                          const problem::Workload& workload);
+
+void load_arch_props(const model::Engine::Specs& arch_specs)
+{
+  arch_props_ = ArchProperties();
+  arch_props_.Construct(arch_specs);
+}
 
 //
 // Parse mapping in libconfig format and generate data structure.
@@ -396,6 +403,7 @@ Mapping ParseAndConstruct(config::CompoundConfigNode config,
                 << prod[dim] << ", which is not equal to "
                 << "the dimension size of the workload " << workload.GetFlattenedBound(dim)
                 << "." << std::endl;
+      std::cerr << config.getYNode() << std::endl;
       fault = true;
     }
   }

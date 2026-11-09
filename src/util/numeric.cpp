@@ -848,6 +848,7 @@ uint128_t SequenceGenerator128::Next()
 RandomGenerator128::RandomGenerator128(uint128_t bound) :
     PatternGenerator128(bound),
     use_two_generators_(bound > uint128_t(uint64_max_)),
+    engine_(std::random_device{}()),
     low_gen_(0, use_two_generators_ ? uint64_max_ : (std::uint64_t)(bound - 1)),
     high_gen_(0, (std::uint64_t)(bound/uint64_max_ - 1))
 {

@@ -1,5 +1,5 @@
 /* Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -11,7 +11,7 @@
  *  * Neither the name of NVIDIA CORPORATION nor the names of its
  *    contributors may be used to endorse or promote products derived
  *    from this software without specific prior written permission.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS ``AS IS'' AND ANY
  * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
@@ -53,7 +53,7 @@ Model::Model(config::CompoundConfig* config,
              std::string output_dir,
              std::string name) :
     name_(name)
-{    
+{
   auto rootNode = config->getRoot();
 
   // Version check
@@ -104,7 +104,7 @@ Model::Model(config::CompoundConfig* config,
   {
     arch = rootNode.lookup("architecture");
   }
-  
+
   bool is_sparse_topology = rootNode.exists("sparse_optimizations");
   arch_specs_ = model::Engine::ParseSpecs(arch, is_sparse_topology);
 
@@ -118,7 +118,7 @@ Model::Model(config::CompoundConfig* config,
       auto art = rootNode.lookup("ART");
       if (verbose_)
         std::cout << "Found Accelergy ART (area reference table), replacing internal area model." << std::endl;
-      arch_specs_.topology.ParseAccelergyART(art);  
+      arch_specs_.topology.ParseAccelergyART(art);
     }
   }
   else
@@ -134,7 +134,7 @@ Model::Model(config::CompoundConfig* config,
       if (verbose_)
         std::cout << "Generate Accelergy ERT (energy reference table) to replace internal energy model." << std::endl;
       arch_specs_.topology.ParseAccelergyERT(ert);
-        
+
       std::string artPath = out_prefix_ + ".ART.yaml";
       auto artConfig = new config::CompoundConfig(artPath.c_str());
       auto art = artConfig->getRoot().lookup("ART");
@@ -152,7 +152,7 @@ Model::Model(config::CompoundConfig* config,
       sparse_optimizations_ = new sparse::SparseOptimizationInfo(sparse::ParseAndConstruct(sparse_optimizations, arch_specs_));
   // characterize workload on whether it has metadata
   workload_.SetDefaultDenseTensorFlag(sparse_optimizations_->compression_info.all_ranks_default_dense);
-  
+
   if (verbose_)
     std::cout << "Sparse optimization configuration complete." << std::endl;
 
@@ -190,14 +190,14 @@ Model::Model(config::CompoundConfig* config,
   std::cout << "Start Parsering Layout" << std::endl;
   config::CompoundConfigNode compound_config_node_layout;
   bool existing_layout = rootNode.lookup("layout", compound_config_node_layout);
-  
+
   if (existing_layout){
     std::map<std::string, std::pair<uint32_t, uint32_t>> externalPortMapping;
     for (auto i: arch_specs_.topology.StorageLevelNames())
         externalPortMapping[i] = {arch_specs_.topology.GetStorageLevel(i)->num_ports.Get(), arch_specs_.topology.GetStorageLevel(i)->num_ports.Get()};
 
     layout_ = layout::ParseAndConstruct(compound_config_node_layout, workload_, externalPortMapping);
-    
+
     layout_initialized_ = true;
 
     layout::PrintOverallLayout(layout_);
@@ -206,7 +206,7 @@ Model::Model(config::CompoundConfig* config,
     layout_initialized_ = false;
     std::cout << "No Layout specified, so using bandwidth based modeling" << std::endl;
   }
-  
+
 }
 
 Model::~Model()
@@ -216,7 +216,7 @@ Model::~Model()
 
   if (arch_props_)
     delete arch_props_;
-  
+
   if (constraints_)
     delete constraints_;
 
@@ -233,7 +233,7 @@ Model::Stats Model::Run()
   auto level_names = arch_specs_.topology.LevelNames();
 
   auto& mapping = *mapping_;
-    
+
   // Optional feature: if the given mapping does not fit in the available
   // hardware resources, automatically bypass storage level(s) to make it
   // fit. This avoids mapping failures and instead substitutes the given
@@ -255,11 +255,14 @@ Model::Stats Model::Run()
                     << std::endl;
         for (unsigned pvi = 0; pvi < workload_.GetShape()->NumDataSpaces; pvi++)
           // Ugh... mask is offset-by-1 because level 0 is the arithmetic level.
-          mapping.datatype_bypass_nest.at(pvi).reset(level-1);
+          if (constraints_->BypassStrings()[pvi].at(level - 1) != '1')
+          {
+            mapping.datatype_bypass_nest.at(pvi).reset(level - 1);
+          }
       }
   }
-  
-  if (layout_initialized_){ 
+
+  if (layout_initialized_){
     auto eval_status = engine.Evaluate(mapping, workload_, layout_, sparse_optimizations_);
     for (unsigned level = 0; level < eval_status.size(); level++)
     {
@@ -271,7 +274,7 @@ Model::Stats Model::Run()
       }
     }
   }else{
-    auto eval_status = engine.Evaluate(mapping, workload_, sparse_optimizations_);    
+    auto eval_status = engine.Evaluate(mapping, workload_, sparse_optimizations_);
     for (unsigned level = 0; level < eval_status.size(); level++)
     {
       if (!eval_status[level].success)
@@ -283,7 +286,7 @@ Model::Stats Model::Run()
     }
   }
 
-  
+
   // if (!std::accumulate(success.begin(), success.end(), true, std::logical_and<>{}))
   // {
   //   std::cout << "Illegal mapping, evaluation failed." << std::endl;
@@ -295,7 +298,7 @@ Model::Stats Model::Run()
   if (engine.IsEvaluated())
   {
     if (!sparse_optimizations_->no_optimization_applied)
-    {   
+    {
       std::cout << "Utilization = " << std::setw(4) << OUT_FLOAT_FORMAT << std::setprecision(2) << engine.Utilization()
               << " | pJ/Algorithmic-Compute = " << std::setw(8) << OUT_FLOAT_FORMAT << PRINTFLOAT_PRECISION << engine.Energy() /
       engine.GetTopology().AlgorithmicComputes()
@@ -322,11 +325,13 @@ Model::Stats Model::Run()
 
   // Print the engine stats and mapping to an XML file
   std::stringstream xml_str;
-  boost::archive::xml_oarchive ar(xml_str);
-  ar << BOOST_SERIALIZATION_NVP(engine);
-  ar << BOOST_SERIALIZATION_NVP(mapping);
-  const Model* a = this;
-  ar << BOOST_SERIALIZATION_NVP(a);
+  {
+    boost::archive::xml_oarchive ar(xml_str);
+    ar << BOOST_SERIALIZATION_NVP(engine);
+    ar << BOOST_SERIALIZATION_NVP(mapping);
+    const Model* a = this;
+    ar << BOOST_SERIALIZATION_NVP(a);
+  }
 
   // Print the mapping in Tenssella input format.
   std::stringstream tenssella_out;

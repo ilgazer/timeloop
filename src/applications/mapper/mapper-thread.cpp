@@ -351,6 +351,8 @@ void MapperThread::Run()
   uint128_t invalid_mappings_mapcnstr = 0;
   uint128_t invalid_mappings_eval = 0;
   std::uint32_t mappings_since_last_best_update = 0;
+  stats_.mappings_searched = 0;
+  stats_.invalid_mappings = 0;
 
   const int ncurses_line_offset = 6;
 
@@ -455,7 +457,7 @@ void MapperThread::Run()
           engine.Evaluate(index_factor_best.mapping, workload_, layout_, sparse_optimizations_, !diagnostics_on_);
         }else
           engine.Evaluate(index_factor_best.mapping, workload_, sparse_optimizations_, !diagnostics_on_);
-          
+
         if (index_factor_best.valid) {
             auto topology = engine.GetTopology();
             mutex_->lock();
@@ -473,6 +475,11 @@ void MapperThread::Run()
     // Terminate.
     if (terminate)
     {
+      mutex_->lock();
+      log_stream_ << "[" << std::setw(3) << thread_id_ << "] STATEMENT: " << stats_.mappings_searched
+                  << " mappings searched with " << stats_.invalid_mappings<< "invalid at termination."
+                  << std::endl;
+      mutex_->unlock();
       if (live_status_)
       {
         mutex_->lock();
@@ -548,6 +555,7 @@ void MapperThread::Run()
                                { return cur && status.success; });
 
     total_mappings++;
+    stats_.mappings_searched++;
     if(success && max_temporal_loops_in_a_mapping_ > 0)
     { // Count the number of temporal loops
       int temporal_loops = 0;
@@ -562,6 +570,7 @@ void MapperThread::Run()
 
     if (!success)
     {
+      stats_.invalid_mappings++;
       invalid_mappings_mapcnstr++;
       if (diagnostics_on_)
       {
@@ -584,6 +593,7 @@ void MapperThread::Run()
 
     if (!success)
     {
+      stats_.invalid_mappings++;
       // Pre-evaluation failed.
       // If the only change in this mapping vs. the previous mapping was in
       // its dataspace bypass scheme, then we may not want to make this
@@ -618,6 +628,7 @@ void MapperThread::Run()
 
     if (!success)
     {
+      stats_.invalid_mappings++;
       // Evaluation failed.
       // If the only change in this mapping vs. the previous mapping was in
       // its dataspace bypass scheme, then we may not want to make this
@@ -704,6 +715,7 @@ void MapperThread::Run()
                   << " | pJ/Compute = " << std::setw(4) << OUT_FLOAT_FORMAT << PRINTFLOAT_PRECISION << stats.energy / stats.actual_computes
                   << " | " << mapping.PrintCompact()
                   << " | Cycles = " << stats.cycles
+                  << " | Energy = " << stats.energy
                   << std::endl;
       }
       else
@@ -713,6 +725,7 @@ void MapperThread::Run()
                   << " | pJ/Compute = " << std::setw(4) << OUT_FLOAT_FORMAT << PRINTFLOAT_PRECISION << stats.energy / stats.actual_computes
                   << " | " << mapping.PrintCompact()
                   << " | Cycles = " << stats.cycles
+                  << " | Energy = " << stats.energy
                   << std::endl;
       }
       mutex_->unlock();

@@ -520,7 +520,7 @@ bool CompoundConfigNode::set(CompoundConfigNode& node)
   EXCEPTION_PROLOGUE;
   
   // Sets our YNode to that of the other node.
-  YNode = node.getYNode();
+  YNode.reset(node.getYNode());
   return true;
 
   EXCEPTION_EPILOGUE;
@@ -635,17 +635,18 @@ int CompoundConfigNode::getLength() const {
 CompoundConfigNode CompoundConfigNode::operator [](int idx) const {
   assert(isList() || isArray());
 
-  if(LNode) return CompoundConfigNode(&(*LNode)[idx], YAML::Node(), cConfig);
-  else if (YNode) {
+  if(LNode)
+  {
+    return CompoundConfigNode(&(*LNode)[idx], YAML::Node(), cConfig);
+  }
+  if (YNode) {
     auto yIter = YNode.begin();
-    for (int i = 0; i < idx; i++) yIter++;
-    auto nextNode = *yIter;
-    return CompoundConfigNode(nullptr, nextNode, cConfig);
+    for (int i = 0; i < idx; i++) ++yIter;
+    const auto nextNode = *yIter;
+    return CompoundConfigNode(nullptr, YAML::Node(nextNode), cConfig);
   }
-  else {
-    assert(false);
-    return CompoundConfigNode(nullptr, YAML::Node(), cConfig);
-  }
+  assert(false);
+  return CompoundConfigNode(nullptr, YAML::Node(), cConfig);
 }
 
 bool CompoundConfigNode::getArrayValue(std::vector<std::string> &vectorValue) const {

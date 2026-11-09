@@ -274,7 +274,7 @@ Mapper::Mapper(config::CompoundConfig* config,
               << "mapspace constraints." << std::endl;
     exit(1);
   }
- 
+
   if (rootNode.exists("mapspace"))
     mapspace = rootNode.lookup("mapspace");
   else if (rootNode.exists("mapspace_constraints"))
@@ -313,7 +313,7 @@ Mapper::Mapper(config::CompoundConfig* config,
   {
     cfg_string_ = nullptr;
   }
-  
+
   // layout modeling
   std::cout << "Start Parsering Layout" << std::endl;
   config::CompoundConfigNode compound_config_node_layout;
@@ -324,7 +324,7 @@ Mapper::Mapper(config::CompoundConfig* config,
         externalPortMapping[i] = {arch_specs_.topology.GetStorageLevel(i)->num_ports.Get(), arch_specs_.topology.GetStorageLevel(i)->num_ports.Get()};
 
     layout_ = layout::ParseAndConstruct(compound_config_node_layout, workload_, externalPortMapping);
-    
+
     layout_initialized_ = true;
     layout::PrintOverallLayout(layout_);
   }
@@ -346,7 +346,7 @@ Mapper::~Mapper()
   {
     delete sparse_optimizations_;
   }
-  
+
   for (auto& search: search_)
   {
     if (search)
@@ -449,11 +449,22 @@ Mapper::Result Mapper::Run()
     threads_.at(t)->Start();
   }
 
+
   // Wait for the threads to join.
   for (unsigned t = 0; t < num_threads_; t++)
   {
     threads_.at(t)->Join();
   }
+
+  uint128_t mappings_searched = 0;
+  uint128_t invalid_mappings = 0;
+  // Wait for the threads to join.
+  for (unsigned t = 0; t < num_threads_; t++)
+    {
+      mappings_searched += threads_.at(t)->GetStats().mappings_searched;
+      invalid_mappings += threads_.at(t)->GetStats().invalid_mappings;
+    }
+  std::cout << "Total mappings searched: " << mappings_searched << "\nInvalid:" << invalid_mappings << std::endl;
 
   // Close log and end curses.
   if (live_status_)
@@ -591,7 +602,7 @@ Mapper::Result Mapper::Run()
     // that can be printed out hierarchically.
     model::Engine engine;
     engine.Spec(arch_specs_);
-    
+
     if (layout_initialized_){
       engine.Evaluate(global_best_.mapping, workload_, layout_, sparse_optimizations_);
     }else
@@ -616,7 +627,7 @@ Mapper::Result Mapper::Run()
         global_best_.stats.algorithmic_computes
                 << " | pJ/Compute = " << std::setw(8)
                 << OUT_FLOAT_FORMAT << PRINTFLOAT_PRECISION << global_best_.stats.energy /
-        global_best_.stats.actual_computes 
+        global_best_.stats.actual_computes
                 << " | Cycles = " << global_best_.stats.cycles << std::endl;
     }
     else

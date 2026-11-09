@@ -404,7 +404,7 @@ void Mapping::FormatAsYaml(YAML::Emitter& yaml_mapping,
       permutations.at(spacetime::Dimension::SpaceY);
     
     // Only print spatial directives if there is a spatial permutation.
-    if (spatial_permutation.size() > 0)
+    if (spatial_permutation.size() > 0 || fanoutX_map[storage_level] > 1 || fanoutY_map[storage_level] > 1)
     {
       std::string spatial_factor_string = "";
 

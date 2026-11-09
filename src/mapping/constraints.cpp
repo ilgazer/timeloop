@@ -95,7 +95,7 @@ const std::map<unsigned, std::map<problem::Shape::FlattenedDimensionID, int>>&
   return min_factors_;
 }
 
-const std::map<unsigned, std::uint32_t>& 
+const std::map<unsigned, std::uint32_t>&
   Constraints::MaxRemainders() const
 {
   return max_remainders_;
@@ -113,7 +113,7 @@ Constraints::SpatialSplits() const
 {
   return spatial_splits_;
 }
-  
+
 const problem::PerDataSpace<std::string>&
 Constraints::BypassStrings() const
 {
@@ -174,10 +174,10 @@ Constraints::no_coalesce() const
 void Constraints::Generate(Mapping* mapping)
 {
   auto num_storage_levels = mapping->loop_nest.storage_tiling_boundaries.size();
-    
+
   // Data-space Bypass.
   auto mask_nest = tiling::TransposeMasks(mapping->datatype_bypass_nest, &workload_);
-    
+
   for (unsigned storage_level = 0; storage_level < num_storage_levels; storage_level++)
   {
     auto& compound_mask = mask_nest.at(storage_level);
@@ -190,7 +190,7 @@ void Constraints::Generate(Mapping* mapping)
         bypass_strings_.at(pv).at(storage_level) = '0';
     }
   }
-    
+
   // Factors, Permutations and Spatial Split.
   unsigned loop_level = 0;
   for (unsigned storage_level = 0; storage_level < num_storage_levels; storage_level++)
@@ -198,7 +198,7 @@ void Constraints::Generate(Mapping* mapping)
     std::map<spacetime::Dimension, std::vector<problem::Shape::FlattenedDimensionID>> permutations;
     std::map<spacetime::Dimension, std::map<problem::Shape::FlattenedDimensionID, int>> factors;
     unsigned spatial_split;
-      
+
     // Collect loop bounds and ordering.
     for (unsigned sdi = 0; sdi < unsigned(spacetime::Dimension::Num); sdi++)
     {
@@ -220,16 +220,16 @@ void Constraints::Generate(Mapping* mapping)
 
     // Determine X-Y split.
     spatial_split = permutations.at(spacetime::Dimension::SpaceX).size();
-    
+
     // Merge spatial X and Y factors and permutations.
     std::vector<problem::Shape::FlattenedDimensionID> spatial_permutation;
     spatial_permutation = permutations.at(spacetime::Dimension::SpaceX);
     spatial_permutation.insert(spatial_permutation.end(),
                                permutations.at(spacetime::Dimension::SpaceY).begin(),
                                permutations.at(spacetime::Dimension::SpaceY).end());
-      
+
     // Only generate spatial constraints if there is a spatial permutation.
-    if (spatial_permutation.size() > 0)
+    if (spatial_permutation.size() > 0 || mapping->fanoutX_map[storage_level] > 1 || mapping->fanoutY_map[storage_level] > 1)
     {
       std::map<problem::Shape::FlattenedDimensionID, int> spatial_factors;
       for (unsigned idim = 0; idim < unsigned(workload_.GetShape()->NumFlattenedDimensions); idim++)
@@ -253,7 +253,7 @@ void Constraints::Generate(Mapping* mapping)
 
     auto& temporal_permutation = permutations.at(spacetime::Dimension::Time);
     auto& temporal_factors = factors.at(spacetime::Dimension::Time);
-    
+
     // Temporal factors: if the factor is 1, concatenate it into the permutation.
     for (unsigned idim = 0; idim < unsigned(workload_.GetShape()->NumFlattenedDimensions); idim++)
     {
@@ -261,14 +261,14 @@ void Constraints::Generate(Mapping* mapping)
       if (temporal_factors.at(dim) == 1)
         temporal_permutation.push_back(dim);
     }
-    
+
     auto tiling_level = arch_props_.TemporalToTiling(storage_level);
     factors_[tiling_level] = temporal_factors;
     permutations_[tiling_level] = std::make_pair(temporal_permutation,
                                                  std::vector<problem::Shape::FlattenedDimensionID>());
   }
 }
-  
+
 //
 // Check if a given Constraints object is a subset (i.e., more constrained).
 //
@@ -299,7 +299,7 @@ bool Constraints::operator >= (const Constraints& other) const
     {
       auto dim = dim_entry.first;
       auto val = dim_entry.second;
-        
+
       auto other_dim_entry = other_level_factors.find(dim);
       if (other_dim_entry == other_level_factors.end())
       {
@@ -327,7 +327,7 @@ bool Constraints::operator >= (const Constraints& other) const
   //   auto& level_max_factors = level_entry.second;
 
   //   auto other_level_it = other.factors_.find(level);
-  //   // RESUME HERE.      
+  //   // RESUME HERE.
 
   //   auto other_max_level_it = other.max_factors_.find(level);
   //   if (other_max_level_it == other.max_factors_.end())
@@ -345,7 +345,7 @@ bool Constraints::operator >= (const Constraints& other) const
   //   {
   //     auto dim = dim_entry.first;
   //     auto val = dim_entry.second;
-        
+
   //     auto other_dim_entry = other_level_max_factors.find(dim);
   //     if (other_dim_entry == other_level_max_factors.end())
   //     {
@@ -359,7 +359,7 @@ bool Constraints::operator >= (const Constraints& other) const
   //       // max value. Ergo, it is less constrained than us.
   //       return false;
   //     }
-  //   }      
+  //   }
   // }
 
   return true;
@@ -387,19 +387,26 @@ bool Constraints::SatisfiedBy(Mapping* mapping) const
     auto& level_factors = level_entry.second;
 
     auto other_level_it = other.factors_.find(level);
-    assert(other_level_it != other.factors_.end());
+    if (other_level_it == other.factors_.end()) {
+      std::cout << "Constraints not satisfied: missing factor level" << level << "in mapping." << std::endl;
+      return false;
+    }
 
     auto other_level_factors = other_level_it->second;
     for (auto& dim_entry: level_factors)
     {
       auto dim = dim_entry.first;
       auto val = dim_entry.second;
-        
+
       auto other_dim_entry = other_level_factors.find(dim);
-      assert(other_dim_entry != other_level_factors.end());
+      if (other_dim_entry == other_level_factors.end()) {
+        std::cout << "SatisfiedBy false" << __LINE__ << std::endl;
+        return false;
+      }
 
       if (other_dim_entry->second != val)
       {
+        std::cout << "SatisfiedBy false" << __LINE__ << std::endl;
         return false;
       }
     }
@@ -414,43 +421,56 @@ bool Constraints::SatisfiedBy(Mapping* mapping) const
     auto& level_max_factors = level_entry.second;
 
     auto other_level_it = other.factors_.find(level);
-    assert(other_level_it != other.factors_.end());
+    if (other_level_it == other.factors_.end()) {
+      std::cout << "SatisfiedBy false" << __LINE__ << std::endl;
+      return false;
+    }
 
     auto& other_level_factors = other_level_it->second;
     for (auto& dim_entry: level_max_factors)
     {
       auto dim = dim_entry.first;
       auto max_val = dim_entry.second;
-        
+
       auto other_dim_entry = other_level_factors.find(dim);
-      assert(other_dim_entry != other_level_factors.end());
+      if (other_dim_entry == other_level_factors.end()) {
+        std::cout << "SatisfiedBy false" << __LINE__ << std::endl;
+        return false;
+      }
 
       if (other_dim_entry->second > max_val)
       {
+        std::cout << "SatisfiedBy false" << __LINE__ << std::endl;
         return false;
       }
     }
   }
-    
+
   // --- Permutations ---
   for (auto& level_entry: permutations_)
   {
     // This is tricky. We need to ignore unit-factors in other.
     unsigned level = level_entry.first;
-    auto& permutation = level_entry.second.first; // **** FIXME **** need suffix check.
+    auto& [prefix_permutation, suffix_permutation] = level_entry.second;
 
     auto other_factors_level_it = other.factors_.find(level);
-    assert(other_factors_level_it != other.factors_.end());
+    if (other_factors_level_it == other.factors_.end()) {
+      std::cout << "SatisfiedBy false" << __LINE__ << std::endl;
+        return false;
+    }
     auto& other_level_factors = other_factors_level_it->second;
 
     auto other_permutation_level_it = other.permutations_.find(level);
-    assert(other_permutation_level_it != other.permutations_.end());
+    if (other_permutation_level_it == other.permutations_.end()) {
+      std::cout << "SatisfiedBy false" << __LINE__ << std::endl;
+        return false;
+    }
     auto& other_permutation = other_permutation_level_it->second.first; // Generate() only uses prefix.
-      
-    unsigned idx = 0, other_idx = 0;
-    while (idx < permutation.size() && other_idx < other_permutation.size())
+
+    long idx = 0, other_idx = 0;
+    while (idx < static_cast<long>(prefix_permutation.size()) && other_idx < static_cast<long>(other_permutation.size()))
     {
-      if (permutation.at(idx) == other_permutation.at(other_idx))
+      if (prefix_permutation.at(idx) == other_permutation.at(other_idx))
       {
         // So far so good...
         idx++;
@@ -458,31 +478,119 @@ bool Constraints::SatisfiedBy(Mapping* mapping) const
         continue;
       }
 
-      // We have a mismatch. However, if this is a unit-factor
-      // we can skip ahead.
-      if (other_level_factors.at(other_permutation.at(idx)) == 1)
+      // We have a mismatch. However, if the constraint factor is a unit-factor in the actual mapping we can skip ahead.
+      if (other_level_factors.at(prefix_permutation.at(idx)) == 1)
+      {
+        idx++;
+        continue;
+      }
+
+      // We have a mismatch. However, if the mapping factor is a unit-factor in the actual mapping we can skip ahead.
+      if (other_level_factors.at(other_permutation.at(other_idx)) == 1)
       {
         other_idx++;
         continue;
       }
 
       // Fail.
-      return false;
+      std::cout << "SatisfiedBy false" << __LINE__ << std::endl;
+        return false;
     }
+
+    idx = suffix_permutation.size() - 1, other_idx = other_permutation.size() - 1;
+    while (idx >= 0 && other_idx >= 0)
+    {
+      if (suffix_permutation.at(idx) == other_permutation.at(other_idx))
+      {
+        // So far so good...
+        idx--;
+        other_idx--;
+        continue;
+      }
+
+      // We have a mismatch. However, if this is a unit-factor
+      // we can skip ahead.
+      if (other_level_factors.at(suffix_permutation.at(idx)) == 1)
+      {
+        idx--;
+        continue;
+      }
+
+      // We have a mismatch. However, if this is a unit-factor
+      // we can skip ahead.
+      if (other_level_factors.at(other_permutation.at(other_idx)) == 1)
+      {
+        other_idx--;
+        continue;
+      }
+
+      // Fail.
+      std::cout << "SatisfiedBy false" << __LINE__ << std::endl;
+        return false;
+    }
+
   }
-    
+
   // --- Spatial splits ---
   for (auto& level_entry: spatial_splits_)
   {
     unsigned level = level_entry.first;
-    auto split = level_entry.second;
+
+    auto factors_level_it = factors_.find(level);
+    assert(factors_level_it != factors_.end());
+    auto& level_factors = factors_level_it->second;
+
+    auto permutation_level_it = permutations_.find(level);
+    assert(permutation_level_it != permutations_.end());
+    auto& permutation = permutation_level_it->second.first; // Generate() only uses prefix.
+
+    const auto split = std::min(level_entry.second, static_cast<unsigned>(permutation.size()));
 
     auto other_level_it = other.spatial_splits_.find(level);
-    assert(other_level_it != other.spatial_splits_.end());
+    if (other_level_it == other.spatial_splits_.end()) {
+      std::cout << "SatisfiedBy false" << __LINE__ << std::endl;
+        return false;
+    }
+    auto other_split = other_level_it->second;
 
-    if (split != other_level_it->second)
-    {
-      return false;
+    auto other_factors_level_it = other.factors_.find(level);
+    assert(other_factors_level_it != other.factors_.end());
+
+    auto other_permutation_level_it = other.permutations_.find(level);
+    assert(other_permutation_level_it != other.permutations_.end());
+    auto& other_permutation = other_permutation_level_it->second.first; // Generate() only uses prefix.
+
+    // The split defines two sets out of the factors. We need to check that the non-one elements of the left sets are the same for both constraints.
+    for (unsigned int idx = 0; idx < split; ++idx) {
+      auto factor_it = level_factors.find(permutation.at(idx));
+      // This is a 1 element and therefore doesn't matter. We know both sides are 1 because we checked for it above.
+      if (factor_it == level_factors.end() || factor_it->second == 1) {
+        continue;
+      }
+      auto other_perm_it = std::find(other_permutation.begin(), other_permutation.end(), permutation.at(idx));
+      assert(other_perm_it != other_permutation.end());
+      // The factor in other is on the left side of the split
+      if (std::distance(other_permutation.begin(), other_perm_it) < other_split) {
+        continue;
+      }
+      std::cout << "SatisfiedBy false" << __LINE__ << std::endl;
+        return false;
+    }
+
+    for (unsigned int idx = split; idx < permutation.size(); ++idx) {
+      auto factor_it = level_factors.find(permutation.at(idx));
+      // This is a 1 element and therefore doesn't matter. We know both sides are 1 because we checked for it above.
+      if (factor_it == level_factors.end() || factor_it->second == 1) {
+        continue;
+      }
+      auto other_perm_it = std::find(other_permutation.begin(), other_permutation.end(), permutation.at(idx));
+      assert(other_perm_it != other_permutation.end());
+      // The factor in other is on the right side of the split
+      if (other_split <= std::distance(other_permutation.begin(), other_perm_it)) {
+        continue;
+      }
+      std::cout << "SatisfiedBy false" << __LINE__ << std::endl;
+        return false;
     }
   }
 
@@ -500,11 +608,11 @@ bool Constraints::SatisfiedBy(Mapping* mapping) const
       if (my_char != 'X' && my_char != other_char)
       {
         // FIXME: Default string with last level set to 1 is not right, failed on SCNN IORAM
-        //return false;
+      std::cout << "SatisfiedBy false" << __LINE__ << std::endl;
+        return false;
       }
     }
   }
-
   return true;
 }
 
@@ -546,7 +654,7 @@ void Constraints::Parse(config::CompoundConfigNode config)
     }
     // else: no constraints specified, nothing to do.
   }
-}  
+}
 
 //
 // Parse a list of constraints.
@@ -569,7 +677,7 @@ void Constraints::ParseList(config::CompoundConfigNode constraints)
     {
       auto constraints_list = target.lookup("constraints");
       assert(constraints_list.isList());
-        
+
       for (int j = 0; j < constraints_list.getLength(); j++)
       {
         auto constraint = constraints_list[j];
@@ -595,7 +703,7 @@ void Constraints::ParseList(config::CompoundConfigNode constraints)
 
       ParseSingleConstraint(target, constraint, attributes);
     }
-  }    
+  }
 }
 
 //
@@ -693,7 +801,7 @@ void Constraints::ParseSingleConstraint(
         spatial_splits_[level_id] = split;
       }
       // No link transfer
-      
+
       if (constraint.exists("no_link_transfer"))
       {
         auto storage_level = arch_props_.TilingToStorage(level_id);
@@ -708,7 +816,7 @@ void Constraints::ParseSingleConstraint(
         }
         no_link_transfer_[storage_level] = problem::PerDataSpace<bool>();
         for(unsigned pv = 0; pv < workload_.GetShape()->NumDataSpaces; pv++)
-          no_link_transfer_[storage_level][pv] = 0;        
+          no_link_transfer_[storage_level][pv] = 0;
         for (const std::string& datatype_string: datatype_strings)
         {
           try
@@ -840,7 +948,7 @@ void Constraints::ParseSingleConstraint(
     {
       max_remainders_[level_id] = maxremainder;
     }
-    
+
   }
   else if (type == "max_overbooked_proportion")
   {
@@ -909,13 +1017,13 @@ void Constraints::ParseSingleConstraint(
 unsigned Constraints::FindTargetTilingLevel(config::CompoundConfigNode constraint, std::string type)
 {
   auto num_storage_levels = arch_props_.StorageLevels();
-    
+
   //
   // Find the target storage level. This can be specified as either a name or an ID.
   //
   std::string storage_level_name;
   unsigned storage_level_id;
-    
+
   if (constraint.lookupValue("target", storage_level_name) ||
       constraint.lookupValue("name", storage_level_name))
   {
@@ -943,8 +1051,8 @@ unsigned Constraints::FindTargetTilingLevel(config::CompoundConfigNode constrain
     assert(id >= 0 && id < int(num_storage_levels));
     storage_level_id = static_cast<unsigned>(id);
   }
-    
-  assert(storage_level_id < num_storage_levels);    
+
+  assert(storage_level_id < num_storage_levels);
 
   //
   // Translate this storage ID to a tiling ID.
@@ -1200,7 +1308,7 @@ Constraints::ParsePermutations(config::CompoundConfigNode constraint)
 {
   std::vector<problem::Shape::FlattenedDimensionID> prefix;
   std::vector<problem::Shape::FlattenedDimensionID> suffix;
-    
+
   std::string buffer;
   if (constraint.lookupValue("permutation", buffer))
   {
@@ -1271,12 +1379,12 @@ void Constraints::ParseDatatypeBypassSettings(config::CompoundConfigNode constra
                   << arch_props_.StorageLevelName(level) << ". This may imply a "
                   << "conflict between architecture and mapspace constraints."
                   << std::endl;
-        exit(1);          
+        exit(1);
       }
       bypass_strings_.at(datatype).at(level) = '1';
     }
   }
-      
+
   // Datatypes to "bypass" at this level.
   if (constraint.exists("bypass"))
   {
@@ -1302,7 +1410,7 @@ void Constraints::ParseDatatypeBypassSettings(config::CompoundConfigNode constra
                   << arch_props_.StorageLevelName(level) << ". This may imply a "
                   << "conflict between architecture and mapspace constraints."
                   << std::endl;
-        exit(1);          
+        exit(1);
       }
       bypass_strings_.at(datatype).at(level) = '0';
     }

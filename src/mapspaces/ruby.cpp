@@ -51,7 +51,7 @@ Ruby::Ruby(
   permutation_space_(workload),
   spatial_split_space_(workload),
   split_id_(0),
-  num_parent_splits_(0),
+  num_parent_splits_(1),
   arch_props_(arch_specs),
   constraints_(arch_props_, workload),
   filter_spatial_fanout_(filter_spatial_fanout)

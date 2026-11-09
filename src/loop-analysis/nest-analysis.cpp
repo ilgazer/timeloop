@@ -2046,7 +2046,6 @@ void NestAnalysis::InitNumSpatialElems()
       {
           // Find the next-outermost loop of the same dimension.
           auto loop2 = nest_state_.rbegin();
-          bool found = false;
           double outer_size = 1;
           for(; loop2 != nest_state_.rend(); loop2++)
           {
@@ -2056,26 +2055,7 @@ void NestAnalysis::InitNumSpatialElems()
               double end = (double) loop2->descriptor.end;
               double residual_end = (double) loop2->descriptor.residual_end;
               outer_size = (residual_end + end * (outer_size - 1));
-              found = true;
             }
-          }
-          if(!found)
-          {
-            std::cout << "Outermost loop of dimension " << loop->descriptor.dimension << " was imperfectly factorized. " 
-            << "Need more loop levels to factorize this loop... were loops of the dimensions constrained to 1 at all higher levels?" << std::endl;
-            // Print the loop nest! We're gonna crash!!
-            int j = 0;
-            for(auto loop3 = nest_state_.rbegin(); loop3 != nest_state_.rend(); loop3++)
-            {
-              for(int q = 0; q < j; q++) std::cout << "  ";
-              std::cout << "Loop " << j << ": "
-                        << loop3->descriptor.PrintCompact(workload_->GetShape()->FlattenedDimensionIDToName);
-              if(loop3->level == loop->level) std::cout << " <---";
-              std::cout << std::endl;
-              j++;
-            }
-            std::cout << "Exiting..." << std::endl;
-            exit(1);
           }
           double end = (double) loop->descriptor.end;
           double residual_end = (double) loop->descriptor.residual_end;

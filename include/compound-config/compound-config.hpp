@@ -55,6 +55,7 @@ class CompoundConfigNode
 
   libconfig::Setting& getLNode() {return *LNode;}
   YAML::Node getYNode() const {return YNode;}
+  YAML::Node& getYNodeRef() {return YNode;}
 
   /**
    * @brief return compound config node corresponding with `path`.

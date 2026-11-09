@@ -29,13 +29,13 @@
 
 #include <iostream>
 #include <iomanip>
+#include <optional>
 
 #include <boost/archive/text_oarchive.hpp>
 #include <boost/archive/text_iarchive.hpp>
 
 namespace model
 {
-
 //
 // Attribute.
 //
@@ -43,27 +43,35 @@ namespace model
 template<class T>
 class Attribute
 {
- private:
+private:
   T t_;
   std::string name_;
   bool specified_;
 
- public:
-  Attribute() : t_(), name_("NONAME"), specified_(false) {}
-  
-  Attribute(T t) : t_(t), name_("NONAME"), specified_(true) {}
+public:
+  Attribute() : t_(), name_("NONAME"), specified_(false)
+  {
+  }
 
-  Attribute(T t, std::string name) : t_(t), name_(name), specified_(true) {}
-  
+  Attribute(T t) : t_(t), name_("NONAME"), specified_(true)
+  {
+  }
+
+  Attribute(T t, std::string name) : t_(t), name_(name), specified_(true)
+  {
+  }
+
   bool IsSpecified() const { return specified_; }
-  
+
   T Get() const
   {
     assert(specified_);
     return t_;
   }
 
-  friend std::ostream& operator << (std::ostream& out, const Attribute& a)
+  std::optional<T> GetOptional() const { return specified_ ? std::optional<T>(t_) : std::nullopt; }
+
+  friend std::ostream &operator <<(std::ostream &out, const Attribute &a)
   {
     if (a.specified_)
     {
@@ -82,15 +90,14 @@ class Attribute
   // Serialization
   friend class boost::serialization::access;
 
-  template <class Archive>
-  void serialize(Archive& ar, const unsigned int version = 0)
+  template<class Archive>
+  void serialize(Archive &ar, const unsigned int version = 0)
   {
     if (version == 0)
     {
       if (specified_)
-        ar& BOOST_SERIALIZATION_NVP(t_);
+        ar & BOOST_SERIALIZATION_NVP(t_);
     }
-  }  
+  }
 };
-
 } // namespace model

@@ -81,6 +81,8 @@ class MapperThread
 
     std::default_random_engine generator;
     std::uniform_real_distribution<double> distribution;
+    uint128_t mappings_searched;
+    uint128_t invalid_mappings;
 
     Stats();
 

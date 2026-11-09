@@ -37,5 +37,7 @@ namespace mapping
 Mapping ParseAndConstruct(config::CompoundConfigNode config,
                           model::Engine::Specs& arch_specs,
                           const problem::Workload& workload);
-
+void load_arch_props(const model::Engine::Specs& arch_specs);
+unsigned FindTargetTilingLevel(config::CompoundConfigNode directive, std::string type);
+unsigned FindTargetStorageLevel(config::CompoundConfigNode directive);
 } // namespace mapping
