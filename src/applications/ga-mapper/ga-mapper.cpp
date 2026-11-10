@@ -315,6 +315,9 @@ namespace dse {
             << std::setfill('0') << std::setw(2) << h.count() << ":"
             << std::setfill('0') << std::setw(2) << m.count() << ":"
             << std::setfill('0') << std::setw(2) << s.count() << std::endl;
+        // setfill is sticky: restore the default so the engine stats below
+        // are padded with spaces, as timeloop-mapper writes them.
+        stats_file << std::setfill(' ');
       }
 
       for (auto &indStats: bestIndStats) {
